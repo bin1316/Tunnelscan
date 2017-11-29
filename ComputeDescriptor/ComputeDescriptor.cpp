@@ -7,8 +7,12 @@
 #include <pcl/filters/filter_indices.h>
 #include <pcl/search/pcl_search.h>
 #include <pcl/common/centroid.h>
+
+#include <flann/flann.h>
+
 #include <pcl/io/pcd_io.h>
 #include <PCL_io.h>
+
 #include<Eigen/Eigenvalues>
 #include <vector>
 #include <map>
@@ -21,17 +25,24 @@
 #include <iostream>
 using namespace std;
 
-
+namespace flann
+{
+	template <typename T> struct L2_Simple;
+	template <typename T> class Index;
+}
 namespace pcl{
-	template<typename PointT>
+	template<typename PointT,typename Dist = ::flann::L2_Simple<float>>
 	class Descriptor{
 		
 	public:
-		Descriptor(){};
+		Descriptor(){
+			des_dim_ = 54;
+		};
 		typedef typename pcl::PointCloud<PointT> PointCloud;
 		typedef typename PointCloud::Ptr PointCloudPtr;
 		typedef typename PointCloud::ConstPtr PointCloudConstPtr;
 		typedef typename pcl::search::Search<PointT>::Ptr SearcherPtr;
+		typedef ::flann::Index<Dist> FLANNIndex;
 
 		inline void setStddevMulThresh(double stddev_mult){
 			std_mul_ = stddev_mult;
@@ -68,7 +79,10 @@ namespace pcl{
 
 		void computeModelDescriptor();
 
+		void buildModelIndex();
+
 	private:
+		int des_dim_;//算子的维度;
 		PointCloudConstPtr input_model, input_cloud;
 		SearcherPtr searcher_;
 		pcl::PointCloud<pcl::Normal>::Ptr normal_model, normal_cloud;
@@ -76,10 +90,12 @@ namespace pcl{
 		int mean_k_, std_mul_;
 		map<int, std::vector<float>> mp_feature;//存储key_point的初始特征描述子
 		std::vector<std::vector<float>> des;//存储key_point的合成特征描述子
+		boost::shared_ptr<FLANNIndex> flann_index;
+		boost::shared_array<float> des_;
 	};
 
-	template <typename PointT> std::vector<float>
-		pcl::Descriptor<PointT>::convFeatureMatrix(std::vector<Eigen::Matrix4i> &FeatureMatrix){
+	template <typename PointT, typename Dist> std::vector<float>
+		pcl::Descriptor<PointT, Dist>::convFeatureMatrix(std::vector<Eigen::Matrix4i> &FeatureMatrix){
 			int t[8][3] = { { 0, 0, 0 }, { 0, 0, 1 }, { 0, 1, 0 }, { 0, 1, 1 }, { 1, 0, 0 }, { 1, 0, 1 }, { 1, 1, 0 }, { 1, 1, 1 } };
 			float sum, allsum = 0;
 			std::vector<float> res(27);
@@ -102,24 +118,24 @@ namespace pcl{
 			return res;
 		}
 
-	template <typename PointT> void
-		pcl::Descriptor<PointT>::addvector(std::vector<float> &sum, std::vector<float> &vc){
+		template <typename PointT, typename Dist> void
+			pcl::Descriptor<PointT, Dist>::addvector(std::vector<float> &sum, std::vector<float> &vc){
 			int size = sum.size();
 			for (int i = 0; i < size; i++){
 				sum[i] += vc[i];
 			}
 		}
 
-	template <typename PointT> void
-		pcl::Descriptor<PointT>::dividevector(std::vector<float> &sum, int num){
+		template <typename PointT, typename Dist> void
+			pcl::Descriptor<PointT, Dist>::dividevector(std::vector<float> &sum, int num){
 			int size = sum.size();
 			for (int i = 0; i < size; i++){
 				sum[i] /= num;
 			}
 		}
 
-	template <typename PointT> void
-		pcl::Descriptor<PointT>::computeModelDescriptor(){
+		template <typename PointT, typename Dist> void
+			pcl::Descriptor<PointT, Dist>::computeModelDescriptor(){
 			if (key_model.size() == 0)return;
 			// The arrays to be used for knn
 			std::vector<int> n_indices(mean_k_);
@@ -187,6 +203,19 @@ namespace pcl{
 			}
 		}
 
+		template <typename PointT, typename Dist> void
+			pcl::Descriptor<PointT, Dist>::buildModelIndex(){
+			int rows = key_model.size();
+			des_.reset(new float[rows*des_dim_]);
+			for (int i = 0; i < rows; i++){
+				for (int j = 0; j < des_dim_; j++){
+					*(des_.get() + i*des_dim_ + j) = des[i][j];
+				}
+			}
+			//des.clear();//清空des，释放内存
+			flann_index.reset(new FLANNIndex(::flann::Matrix<float>(des_.get(), rows, des_dim_), ::flann::KDTreeSingleIndexParams(15)));
+			flann_index->buildIndex();
+		}
 }
 
 int _tmain(int argc, _TCHAR* argv[])
@@ -197,7 +226,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	MyloadpcdfileN(*model, "../../PCL_Data/111701/cloud_final.pcd");
 	MyloadpcdfileN(*cloud, "../../PCL_Data/111702/cloud_final.pcd");
 	std::vector<int> key;
-	for (int i = 0; i < 1000; i++){
+	for (int i = 0; i < 10; i++){
 		key.push_back(10 * i);
 	}
 	int t1, t2;
@@ -208,6 +237,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	de.setMeanK(100);
 	de.setStddevMulThresh(80);
 	de.computeModelDescriptor();
+	de.buildModelIndex();
 	t2 = clock();
 	cout << (float)(t2 - t1) / CLOCKS_PER_SEC << endl;
 	return 0;
