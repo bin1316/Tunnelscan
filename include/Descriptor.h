@@ -2,6 +2,7 @@
 
 #include <flann/flann.h>
 #include <pcl/search/pcl_search.h>
+#include <pcl/common/transforms.h>
 #include<Eigen/Eigenvalues>
 #include <Eigen/SVD>
 #include <map>
@@ -63,23 +64,23 @@ namespace pcl{
 			normal_model = model;
 			normal_cloud = cloud;
 		}
-		
 		void getKeyPair(std::vector<pair<int, int>> &corres_point_){
 			corres_point_ = corres_point;
 		}
+		//计算卷积矩阵
 		std::vector<float> convFeatureMatrix(std::vector<Eigen::Matrix4i> &FeatureMatrix);
-
+		//特征向量加法
 		void addvector(std::vector<float> &sum, std::vector<float> &vc);
-
+		//特征向量除法
 		void dividevector(std::vector<float> &sum, int num);
-
+		//计算合成特征描述子
 		void computeDescriptor(std::vector<int> &key_v, SearcherPtr search, PointCloudConstPtr cloud, std::vector<std::vector<float>> &des_v);
-
+		//建立模型中合成特征描述子的kdtree
 		void buildModelIndex();
-
+		//匹配关键点
 		void matchKeyPoint();
-
-		void applytransform();
+		//根据对应点旋转input_cloud
+		void applytransform(PointCloudPtr output,int count,bool ComputeError);
 
 	private:
 		int des_dim;//算子的维度;
@@ -93,6 +94,8 @@ namespace pcl{
 		boost::shared_array<float> des_cloud_;
 		std::vector<pair<int, int>> corres_point;//用于存储对应点对
 	};
+
+	
 
 	template <typename PointT, typename Dist> std::vector<float>
 		pcl::Descriptor<PointT, Dist>::convFeatureMatrix(std::vector<Eigen::Matrix4i> &FeatureMatrix){
@@ -231,28 +234,42 @@ namespace pcl{
 						*(des_cloud_.get() + i*des_dim + j) = des_cloud[i][j];
 					}
 				}
-				std::vector<int> nn_indices(size);
-				std::vector<float> nn_dist(size);
-				flann::Matrix<int> indices_mat(&nn_indices[0], size, 1);
-				flann::Matrix<float> dist_mat(&nn_dist[0], size, 1);
-				flann_index->knnSearch(flann::Matrix<float>(des_cloud_.get(), size, des_dim), indices_mat, dist_mat, 1, flann::SearchParams(-1, 0.0f));
-				for (int i = 0; i < size; i++){
-					float dis = pow(input_model->points[key_model[nn_indices[i]]].x - input_cloud->points[key_cloud[i]].x, 2) +
-						pow(input_model->points[key_model[nn_indices[i]]].y - input_cloud->points[key_cloud[i]].y, 2) +
-						pow(input_model->points[key_model[nn_indices[i]]].z - input_cloud->points[key_cloud[i]].z, 2);
-					if (nn_dist[i] < 1 && dis<250000){
-						corres_point.push_back(make_pair(key_model[nn_indices[i]], key_cloud[i]));
+				int k = 4;
+				std::vector<int> nn_indices(size * k);
+				std::vector<float> nn_dist(size * k);
+				flann::Matrix<int> indices_mat(&nn_indices[0], size, k);
+				flann::Matrix<float> dist_mat(&nn_dist[0], size, k);
+				flann_index->knnSearch(flann::Matrix<float>(des_cloud_.get(), size, des_dim), indices_mat, dist_mat, k, flann::SearchParams(-1, 0.0f));
+				for (int i = 0; i < size*k; i++){
+					float dis = pow(input_model->points[key_model[nn_indices[i]]].x - input_cloud->points[key_cloud[i/k]].x, 2) +
+						pow(input_model->points[key_model[nn_indices[i]]].y - input_cloud->points[key_cloud[i/k]].y, 2) +
+						pow(input_model->points[key_model[nn_indices[i]]].z - input_cloud->points[key_cloud[i/k]].z, 2);
+					if (nn_dist[i] < 4 && dis<90000){
+						corres_point.push_back(make_pair(key_model[nn_indices[i]], key_cloud[i/k]));
 					}
 				}
 			}
 
 		template <typename PointT,typename Dist> void
-			pcl::Descriptor<PointT, Dist>::applytransform(){
+			pcl::Descriptor<PointT, Dist>::applytransform(PointCloudPtr output, int count, bool ComputeError){
+				if (output->points.size() != 0)input_cloud = output;
 				int size = corres_point.size();
-				std::vector<int> v1(size), v2(size);
-				for (int i = 0; i < size); i++){
-					v1[i] = corres_point[i].first;
-					v2[i] = corres_point[i].second;
+				std::vector<int> v1, v2;
+				std::vector<pair<int, int>> corres_point_;
+				for (int i = 0; i < size; i++){
+					float dis = pow(input_model->points[corres_point[i].first].x - input_cloud->points[corres_point[i].second].x, 2) +
+						pow(input_model->points[corres_point[i].first].y - input_cloud->points[corres_point[i].second].y, 2) +
+						pow(input_model->points[corres_point[i].first].z - input_cloud->points[corres_point[i].second].z, 2);
+					if (dis>90000 / count)continue;
+					v1.push_back(corres_point[i].first);
+					v2.push_back(corres_point[i].second);
+					corres_point_.push_back(corres_point[i]);
+				}
+				corres_point = corres_point_;
+				cout <<"剩余对应点对:" <<v1.size() << endl;
+				if (v1.size() < 5){
+					cout << "对应点过少" << endl;
+					return;
 				}
 
 				Eigen::Vector4f centroid_src, centroid_tra;
@@ -260,14 +277,14 @@ namespace pcl{
 				Eigen::Matrix4f transform_m = Eigen::Matrix4f::Identity();
 				Eigen::Matrix3f H = Eigen::Matrix3f::Zero(), R;
 
-				pcl::compute3DCentroid(input_model, v1, centroid_src);
-				pcl::compute3DCentroid(input_cloud, v2, centroid_tra);
+				pcl::compute3DCentroid(*input_model, v1, centroid_src);
+				pcl::compute3DCentroid(*input_cloud, v2, centroid_tra);
 
 				p(0) = centroid_src(0), p(1) = centroid_src(1), p(2) = centroid_src(2);
 				p_dot(0) = centroid_tra(0), p_dot(1) = centroid_tra(1), p_dot(2) = centroid_tra(2);
 
 				H = Eigen::Matrix3f::Zero();
-				for (int i = 0; i < size; i++){
+				for (int i = 0; i < v1.size(); i++){
 					H(0, 0) += (input_cloud->points[v2[i]].x - p_dot(0))*(input_model->points[v1[i]].x - p(0));
 					H(0, 1) += (input_cloud->points[v2[i]].x - p_dot(0))*(input_model->points[v1[i]].y - p(1));
 					H(0, 2) += (input_cloud->points[v2[i]].x - p_dot(0))*(input_model->points[v1[i]].z - p(2));
@@ -282,7 +299,21 @@ namespace pcl{
 				Eigen::Matrix3f V = svd.matrixV(), U = svd.matrixU();
 				R = V*U.transpose();
 				t = p - R*p_dot;
+				Eigen::Matrix4f res = Eigen::Matrix4f::Identity();
+				res(0, 0) = R(0, 0), res(0, 1) = R(0, 1), res(0, 2) = R(0, 2), res(0, 3) = t(0);
+				res(1, 0) = R(1, 0), res(1, 1) = R(1, 1), res(1, 2) = R(1, 2), res(1, 3) = t(1);
+				res(2, 0) = R(2, 0), res(2, 1) = R(2, 1), res(2, 2) = R(2, 2), res(2, 3) = t(2);
+				cout << res << endl;
 				//添加代码，实现key_point的旋转与平移
-
+				pcl::transformPointCloud<pcl::PointXYZ>(*input_cloud, *output, res);
+				if (ComputeError){
+					float sum_dis = 0;
+					for (int i = 0; i < v1.size(); i++){
+						sum_dis = pow(input_model->points[corres_point[i].first].x - output->points[corres_point[i].second].x, 2) +
+							pow(input_model->points[corres_point[i].first].y - output->points[corres_point[i].second].y, 2) +
+							pow(input_model->points[corres_point[i].first].z - output->points[corres_point[i].second].z, 2);
+					}
+					cout << "平均误差" << sqrt(sum_dis / v1.size()) << endl;
+				}
 			}
 }
