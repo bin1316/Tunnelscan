@@ -234,20 +234,34 @@ namespace pcl{
 						*(des_cloud_.get() + i*des_dim + j) = des_cloud[i][j];
 					}
 				}
-				int k = 4;
+				int k = 10;
 				std::vector<int> nn_indices(size * k);
 				std::vector<float> nn_dist(size * k);
 				flann::Matrix<int> indices_mat(&nn_indices[0], size, k);
 				flann::Matrix<float> dist_mat(&nn_dist[0], size, k);
 				flann_index->knnSearch(flann::Matrix<float>(des_cloud_.get(), size, des_dim), indices_mat, dist_mat, k, flann::SearchParams(-1, 0.0f));
+				map<int, pair<int, double>> mp_cor_p;
 				for (int i = 0; i < size*k; i++){
 					float dis = pow(input_model->points[key_model[nn_indices[i]]].x - input_cloud->points[key_cloud[i/k]].x, 2) +
 						pow(input_model->points[key_model[nn_indices[i]]].y - input_cloud->points[key_cloud[i/k]].y, 2) +
 						pow(input_model->points[key_model[nn_indices[i]]].z - input_cloud->points[key_cloud[i/k]].z, 2);
 					if (nn_dist[i] < 4 && dis<90000){
-						corres_point.push_back(make_pair(key_model[nn_indices[i]], key_cloud[i/k]));
+						if (sqrt(dis)*0.7>abs(input_model->points[key_model[nn_indices[i]]].x - input_cloud->points[key_cloud[i / k]].x))continue;
+						if (abs(normal_model->points[key_model[nn_indices[i]]].normal_x*normal_cloud->points[key_cloud[i / k]].normal_x +
+							normal_model->points[key_model[nn_indices[i]]].normal_y*normal_cloud->points[key_cloud[i / k]].normal_y +
+							normal_model->points[key_model[nn_indices[i]]].normal_x*normal_cloud->points[key_cloud[i / k]].normal_x) < 0.8)continue;
+						if (mp_cor_p.find(key_model[nn_indices[i]]) != mp_cor_p.end()){
+							if (mp_cor_p[key_model[nn_indices[i]]].second < nn_dist[i])
+								mp_cor_p[key_model[nn_indices[i]]] = make_pair(key_cloud[i / k], nn_dist[i]);
+						}
+						else
+							mp_cor_p[key_model[nn_indices[i]]] = make_pair(key_cloud[i / k], nn_dist[i]);
 					}
 				}
+				for (map<int, pair<int, double>>::iterator it = mp_cor_p.begin(); it != mp_cor_p.end(); it++){
+					corres_point.push_back(make_pair(it->first, it->second.first));
+				}
+				cout <<"Æ¥Åäµã¶Ô: "<< corres_point.size() << endl;
 			}
 
 		template <typename PointT,typename Dist> void
@@ -309,7 +323,7 @@ namespace pcl{
 				if (ComputeError){
 					float sum_dis = 0;
 					for (int i = 0; i < v1.size(); i++){
-						sum_dis = pow(input_model->points[corres_point[i].first].x - output->points[corres_point[i].second].x, 2) +
+						sum_dis += pow(input_model->points[corres_point[i].first].x - output->points[corres_point[i].second].x, 2) +
 							pow(input_model->points[corres_point[i].first].y - output->points[corres_point[i].second].y, 2) +
 							pow(input_model->points[corres_point[i].first].z - output->points[corres_point[i].second].z, 2);
 					}
