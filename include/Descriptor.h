@@ -80,7 +80,9 @@ namespace pcl{
 		//匹配关键点
 		void matchKeyPoint();
 		//根据对应点旋转input_cloud
-		void applytransform(PointCloudPtr output,int count,bool ComputeError);
+		void applytransform(PointCloudPtr output, int count, bool ComputeError);
+		//迭代最近点
+		void  applyICPtransform(PointCloudPtr output, int count, bool ComputeError);
 
 	private:
 		int des_dim;//算子的维度;
@@ -246,10 +248,10 @@ namespace pcl{
 						pow(input_model->points[key_model[nn_indices[i]]].y - input_cloud->points[key_cloud[i/k]].y, 2) +
 						pow(input_model->points[key_model[nn_indices[i]]].z - input_cloud->points[key_cloud[i/k]].z, 2);
 					if (nn_dist[i] < 4 && dis<90000){
-						if (sqrt(dis)*0.7>abs(input_model->points[key_model[nn_indices[i]]].x - input_cloud->points[key_cloud[i / k]].x))continue;
-						if (abs(normal_model->points[key_model[nn_indices[i]]].normal_x*normal_cloud->points[key_cloud[i / k]].normal_x +
-							normal_model->points[key_model[nn_indices[i]]].normal_y*normal_cloud->points[key_cloud[i / k]].normal_y +
-							normal_model->points[key_model[nn_indices[i]]].normal_x*normal_cloud->points[key_cloud[i / k]].normal_x) < 0.8)continue;
+						//if (sqrt(dis)*0.7>abs(input_model->points[key_model[nn_indices[i]]].x - input_cloud->points[key_cloud[i / k]].x))continue;
+						//if (abs(normal_model->points[key_model[nn_indices[i]]].normal_x*normal_cloud->points[key_cloud[i / k]].normal_x +
+						//	normal_model->points[key_model[nn_indices[i]]].normal_y*normal_cloud->points[key_cloud[i / k]].normal_y +
+						//	normal_model->points[key_model[nn_indices[i]]].normal_x*normal_cloud->points[key_cloud[i / k]].normal_x) < 0.8)continue;
 						if (mp_cor_p.find(key_model[nn_indices[i]]) != mp_cor_p.end()){
 							if (mp_cor_p[key_model[nn_indices[i]]].second < nn_dist[i])
 								mp_cor_p[key_model[nn_indices[i]]] = make_pair(key_cloud[i / k], nn_dist[i]);
@@ -329,5 +331,11 @@ namespace pcl{
 					}
 					cout << "平均误差" << sqrt(sum_dis / v1.size()) << endl;
 				}
+			}
+
+		template <typename PointT,typename Dist> void
+			pcl::Descriptor<PointT, Dist>::applyICPtransform(PointCloudPtr output, int count, bool ComputeError){
+				int size = output->points.size();
+				
 			}
 }

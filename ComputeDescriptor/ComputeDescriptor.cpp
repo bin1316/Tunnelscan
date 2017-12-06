@@ -76,46 +76,46 @@ int _tmain(int argc, _TCHAR* argv[])
 	de.buildModelIndex();
 	de.matchKeyPoint();
 	de.applytransform(output, 2,true);
-	//de.applytransform(output, 4,true);
-	de.applytransform(output, 16,true);
-	//de.applytransform(output, 32, true);
-	de.applytransform(output, 64,true);
-	//de.applyICPtransform(output,0, true);
-	//de.applyICPtransform(output,5, true);
-	//de.applytransform(output, 256);
+	de.applytransform(output, 32,true);
+	de.applytransform(output, 256,true);
 	de.getKeyPair(corres_point);
 
-	pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
-	icp.setInputSource(model);
-	icp.setInputTarget(output);
-	icp.setMaxCorrespondenceDistance(0.05);
-	icp.setMaximumIterations(10);
-	icp.align(*output);
-	//Return the state of convergence after the last align run. 
-	//If the two PointClouds align correctly then icp.hasConverged() = 1 (true). 
-	std::cout << "has converged: " << icp.hasConverged() << std::endl;
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr final(new pcl::PointCloud<pcl::PointXYZ>);
+	//pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+	//icp.setInputSource(output);
+	//icp.setInputTarget(model);
+	//icp.setMaxCorrespondenceDistance(20);
+	//icp.setTransformationEpsilon(1e-6);
+	//icp.setEuclideanFitnessEpsilon(1);
+	//icp.setMaximumIterations(50);
+	//icp.align(*output);
+	////Return the state of convergence after the last align run. 
+	////If the two PointClouds align correctly then icp.hasConverged() = 1 (true). 
+	//std::cout << "has converged: " << icp.hasConverged() << std::endl;
 
-	//Obtain the Euclidean fitness score (e.g., sum of squared distances from the source to the target) 
-	std::cout << "score: " << icp.getFitnessScore() << std::endl;
-	std::cout << "----------------------------------------------------------" << std::endl;
+	////Obtain the Euclidean fitness score (e.g., sum of squared distances from the source to the target) 
+	//std::cout << "score: " << icp.getFitnessScore() << std::endl;
+	//std::cout << "----------------------------------------------------------" << std::endl;
 
-	//Get the final transformation matrix estimated by the registration method. 
-	std::cout << icp.getFinalTransformation() << std::endl;
+	////Get the final transformation matrix estimated by the registration method. 
+	//std::cout << icp.getFinalTransformation() << std::endl;
 
 	t2 = clock();
 	cout << (float)(t2 - t1) / CLOCKS_PER_SEC << endl;
 
 	//可视化对应点
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
-	pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> Prgbcloud(cloud, 0, 255, 0);
+	//pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> Prgbcloud(cloud, 0, 255, 0);
 	pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> Prgboutput(output, 255, 0, 0);
+	//pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> Prgbfinal(final, 255, 0, 0);
 	viewer->setBackgroundColor(0, 0, 0);
 	viewer->addText("cloud1", 10, 10, "text");
 	viewer->addPointCloud(model, "model");
 	//viewer->addPointCloud(cloud, Prgbcloud, "cloud");
 	viewer->addPointCloud(output, Prgboutput, "output");
-	pcl::PointXYZ a, b;
-	cout << "匹配关键点对" << corres_point.size() << endl;
+	//viewer->addPointCloud(final, Prgbfinal, "final");
+	//pcl::PointXYZ a, b;
+	//cout << "匹配关键点对" << corres_point.size() << endl;
 	//for (int i = 0; i < corres_point.size(); i++){
 	//	a.x = model->points[corres_point[i].first].x;
 	//	a.y = model->points[corres_point[i].first].y;

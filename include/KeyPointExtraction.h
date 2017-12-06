@@ -236,8 +236,24 @@ pcl::KeyPointExtaction<PointT>::applyFilterIndices(std::vector<int> &indices)
 			normal(0) = slb(0, minvectorIndex), normal(1) = slb(1, minvectorIndex), normal(2) = slb(2, minvectorIndex);
 			i2cent(0) = cent(0) - input_->points[iii].x, i2cent(1) = cent(1) - input_->points[iii].y, i2cent(2) = cent(2) - input_->points[iii].z;
 			double dis_ = abs(normal.dot(i2cent));//点乘求点到平面的距离
-			if (dis_ > mindis_)//距离大于阈值定为keypoint
-				isRemained.push_back(iii);
+			if (dis_ > mindis_){//距离大于阈值定为keypoint
+				double d1 = 0, d2 = 0, d3 = 0, s1 = 0, s2 = 0, s3 = 0;
+				for (int i = 0; i < findnum; i++){
+					d1 += pow(normal_->points[nn_indices[i]].normal_x, 2);
+					d2 += pow(normal_->points[nn_indices[i]].normal_y, 2);
+					d3 += pow(normal_->points[nn_indices[i]].normal_z, 2);
+					s1 += normal_->points[nn_indices[i]].normal_x;
+					s2 += normal_->points[nn_indices[i]].normal_y;
+					s3 += normal_->points[nn_indices[i]].normal_z;
+				}
+				d1 = d1 / findnum - pow(s1 / findnum, 2);
+				d2 = d2 / findnum - pow(s2 / findnum, 2);
+				d3 = d3 / findnum - pow(s3 / findnum, 2);
+				d1 = min(d1, min(d2, d3));
+				//cout << d1 << endl;
+				if (d1>0.15)//三个方向的法向量的方差都足够大，视为角点
+					isRemained.push_back(iii);
+			}
 			else if (minlambda < minlambda_){//小于阈值并且特征值小于阈值，剪枝
 				for (int j = 0; j < findnum; j++){
 					if (abs(normal(0)*normal_->points[nn_indices[j]].normal_x +
